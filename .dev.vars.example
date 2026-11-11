@@ -1,0 +1,4 @@
+# 本機開發用（複製為 .dev.vars，勿提交）
+# 只有 ENVIRONMENT=development 時，後端才會接受 X-User-Email 模擬身分。
+# 正式環境請勿設定此變數。
+ENVIRONMENT=development
