@@ -21,7 +21,8 @@
       </div>
       <div class="space-y-1 text-sm text-right">
         <div id="user-info" class="font-mono text-slate-700">載入中...</div>
-        <div class="text-xs text-slate-400">
+        <!-- 只在本機開發（localhost）顯示；正式環境一律由 Cloudflare Access 登入 -->
+        <div id="dev-email-box" class="hidden text-xs text-slate-400">
           開發 模式可填 email 模擬：<br />
           <input
             id="dev-email"
@@ -277,6 +278,10 @@
     const userInfoEl = document.getElementById("user-info");
     const globalMessageEl = document.getElementById("global-message");
     const devEmailInput = document.getElementById("dev-email");
+    const IS_LOCAL_DEV = ["localhost", "127.0.0.1"].includes(location.hostname);
+    if (IS_LOCAL_DEV) {
+      document.getElementById("dev-email-box").classList.remove("hidden");
+    }
 
     function showMessage(text, type = "info") {
       if (!text) {
@@ -319,7 +324,7 @@
 
     /**
      * 統一呼叫後端 API 的 helper
-     * - 會自動帶上 dev email（X-User-Email）
+     * - 本機開發時會帶上 dev email（X-User-Email）
      * - 對正式環境，Access 會用 Cookie，憑證走同網域
      */
     async function apiFetch(path, options = {}) {
@@ -335,8 +340,8 @@
         }
       }
 
-      // dev 模式：如果畫面上有輸入測試 email，就塞 X-User-Email
-      const devEmail = devEmailInput?.value.trim();
+      // dev 模式（僅限 localhost）：如果畫面上有輸入測試 email，就塞 X-User-Email
+      const devEmail = IS_LOCAL_DEV ? devEmailInput?.value.trim() : "";
       if (devEmail) {
         finalHeaders["X-User-Email"] = devEmail;
       }
@@ -367,7 +372,7 @@
           currentUser = data.user;
           userInfoEl.textContent =
             "使用者：" + currentUser.email + " · 建立於 " + currentUser.created_at;
-          if (!devEmailInput.value.trim()) {
+          if (IS_LOCAL_DEV && !devEmailInput.value.trim()) {
             devEmailInput.value = currentUser.email;
           }
         } else {

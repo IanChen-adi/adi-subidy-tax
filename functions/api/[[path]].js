@@ -10,12 +10,23 @@ const ALLOWED_ORIGINS = [
   "https://inv-adi.org",
 ];
 
-const ADMIN_EMAILS = [
-  "enyichen0413@adi.gov.tw", // 先放你自己，之後可再加其他管理者
+// ===== 管理者 =====
+// 預設管理者；可再用 Pages 環境變數 ADMIN_EMAILS（逗號分隔）追加，不必改程式。
+const DEFAULT_ADMIN_EMAILS = [
+  "enyichen0413@adi.gov.tw",
+  "yswu@adi.gov.tw",
 ];
 
-function isAdmin(email) {
-  return ADMIN_EMAILS.includes(email);
+function getAdminEmails(env) {
+  const extra = String(env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set([...DEFAULT_ADMIN_EMAILS, ...extra]);
+}
+
+function isAdmin(env, email) {
+  return !!email && getAdminEmails(env).has(email.toLowerCase());
 }
 
 function getCorsHeaders(request) {
@@ -42,35 +53,157 @@ function withCors(request, response) {
   });
 }
 
-// 註：原本此處有 decodeJwt()，僅做 base64 解碼、未驗證簽章即取用 email，
-// 等同可被偽造。因身分一律取自 Cloudflare Access 注入的標頭，該函式已無用途，故移除。
-// 若未來需依 Access JWT 取身分，請以 Web Crypto 驗證 RS256 簽章與 aud/iss/exp 後再使用
-// （參考 adi-portal/functions/_lib/auth.js 的 fail-closed 實作）。
+// ===============================
+// 身分驗證：Cloudflare Access JWT（驗證簽章）
+// ===============================
+// 必須在 Pages → Settings → Variables and Secrets 設定：
+//   CF_ACCESS_TEAM_DOMAIN  Zero Trust 團隊網域，例如 "xxx.cloudflareaccess.com"
+//   CF_ACCESS_AUD          Access 應用程式的 Application Audience (AUD) Tag；
+//                          有多個 Access 應用程式（例如 pages.dev 與自訂網域）時用逗號分隔
+// 沒有設定時一律視為未登入（fail closed），不會再信任任何可被偽造的 header。
+//
+// 本機開發（wrangler pages dev）：.dev.vars 設 ENVIRONMENT=development，且只有 localhost 會接受 X-User-Email。
 
-// 開發環境才允許的「模擬身分」通道。
-// 只有 ENVIRONMENT === "development" 時啟用；正式環境（未設定或任何其他值）一律停用，
-// 避免未經 Cloudflare Access 的請求自送 X-User-Email 冒充任意身分。
-function isDevMode(env) {
-  return !!env && env.ENVIRONMENT === "development";
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
+const JWKS_TTL_MS = 60 * 60 * 1000; // Access 公鑰快取 1 小時
+let jwksCache = { domain: "", keys: null, fetchedAt: 0 };
+
+function b64urlToBytes(s) {
+  const b64 = s
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(s.length / 4) * 4, "=");
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
 
-function getEmail(request, env) {
-  // 1. Cloudflare Access 注入的身分（唯一可信來源）
-  //    此標頭由 Cloudflare 在邊緣寫入，客戶端無法偽造。
-  const email = request.headers.get("Cf-Access-Authenticated-User-Email");
-  if (email) return email;
+function b64urlToJson(s) {
+  return JSON.parse(new TextDecoder().decode(b64urlToBytes(s)));
+}
 
-  // 2. 本地開發模擬身分（僅 development）
-  if (isDevMode(env)) {
-    const dev = request.headers.get("X-User-Email");
+function normalizeTeamDomain(v) {
+  return String(v || "")
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+}
+
+function getCookie(request, name) {
+  const cookie = request.headers.get("Cookie") || "";
+  for (const part of cookie.split(";")) {
+    const [k, ...rest] = part.trim().split("=");
+    if (k === name) return rest.join("=");
+  }
+  return "";
+}
+
+async function getAccessKeys(teamDomain, forceRefresh = false) {
+  const now = Date.now();
+  if (
+    !forceRefresh &&
+    jwksCache.domain === teamDomain &&
+    jwksCache.keys &&
+    now - jwksCache.fetchedAt < JWKS_TTL_MS
+  ) {
+    return jwksCache.keys;
+  }
+  const res = await fetch(`https://${teamDomain}/cdn-cgi/access/certs`);
+  if (!res.ok) throw new Error(`無法取得 Access 公鑰：HTTP ${res.status}`);
+  const data = await res.json();
+  jwksCache = { domain: teamDomain, keys: data.keys || [], fetchedAt: now };
+  return jwksCache.keys;
+}
+
+/** 驗證 Access JWT 的簽章、期限、audience、issuer，成功回傳 payload，失敗丟出錯誤 */
+async function verifyAccessJwt(token, env) {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("JWT 格式錯誤");
+
+  const header = b64urlToJson(parts[0]);
+  const payload = b64urlToJson(parts[1]);
+  if (header.alg !== "RS256") throw new Error(`不支援的演算法：${header.alg}`);
+
+  const teamDomain = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
+  let keys = await getAccessKeys(teamDomain);
+  let jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) {
+    // 公鑰可能剛輪替，強制重抓一次
+    keys = await getAccessKeys(teamDomain, true);
+    jwk = keys.find((k) => k.kid === header.kid);
+  }
+  if (!jwk) throw new Error("找不到對應的 Access 公鑰");
+
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+  const valid = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    b64urlToBytes(parts[2]),
+    new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
+  );
+  if (!valid) throw new Error("JWT 簽章無效");
+
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== "number" || payload.exp < now) {
+    throw new Error("JWT 已過期");
+  }
+  if (typeof payload.nbf === "number" && payload.nbf > now + 60) {
+    throw new Error("JWT 尚未生效");
+  }
+
+  const allowedAud = String(env.CF_ACCESS_AUD || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if (!tokenAud.some((a) => allowedAud.includes(a))) {
+    throw new Error("JWT audience 不符");
+  }
+  if (payload.iss !== `https://${teamDomain}`) {
+    throw new Error("JWT issuer 不符");
+  }
+  return payload;
+}
+
+/** 取得目前登入者 email；未登入或驗證失敗回傳空字串 */
+async function getEmail(request, env) {
+  const { hostname } = new URL(request.url);
+
+  // 1. 本機開發模式（只限 localhost，且需 ENVIRONMENT=development）
+  if (env.ENVIRONMENT === "development" && LOCAL_HOSTNAMES.has(hostname)) {
+    const dev = (request.headers.get("X-User-Email") || "").trim();
     if (dev) return dev;
   }
 
-  // 3. 都沒有 → 未登入
-  //    註：原本第 3 順位會解析 cf-access-jwt-assertion，但只做 base64 解碼、
-  //    未驗證 RS256 簽章與 aud/iss/exp，等同可被偽造，故移除。
-  //    若未來需要依 JWT 取身分，須先補上完整簽章驗證再啟用。
-  return "";
+  // 2. Cloudflare Access：header 或 CF_Authorization cookie 內的 JWT，必須驗證簽章。
+  //    不使用 Cf-Access-Authenticated-User-Email：請求沒經過 Access 時（例如未納入保護的
+  //    預覽網址），這個 header 可以由客戶端自行偽造；只有簽章驗證過的 JWT 才可信。
+  const token =
+    request.headers.get("Cf-Access-Jwt-Assertion") ||
+    getCookie(request, "CF_Authorization");
+  if (!token) return "";
+
+  if (!env.CF_ACCESS_TEAM_DOMAIN || !env.CF_ACCESS_AUD) {
+    console.error(
+      "未設定 CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD，無法驗證登入，一律視為未登入"
+    );
+    return "";
+  }
+
+  try {
+    const payload = await verifyAccessJwt(token, env);
+    return String(payload.email || "").trim();
+  } catch (e) {
+    console.warn("Access JWT 驗證失敗：", e && e.message ? e.message : e);
+    return "";
+  }
 }
 
 
@@ -177,7 +310,7 @@ export const onRequest = async (context) => {
     });
   }
 
-  const email = getEmail(request, env);
+  const email = await getEmail(request, env);
 
   try {
     // 健康檢查
@@ -284,7 +417,6 @@ export const onRequest = async (context) => {
         {
           error: "Internal Error",
           message: String(err && err.message ? err.message : err),
-          stack: err && err.stack ? err.stack : null,
         },
         500
       )
@@ -330,7 +462,7 @@ async function handleMe(env, email) {
       .first();
   }
 
-  return json({ authenticated: true, user });
+  return json({ authenticated: true, user, is_admin: isAdmin(env, email) });
 }
 
 async function handleListServices(env, email, url) {
@@ -464,7 +596,7 @@ async function handleDeleteService(env, email, serviceId) {
   const isOwner = service.owner_email === email;
 
   //僅允許：管理端 或 現任 owner
-  if (!isAdmin(email) && !isOwner) {
+  if (!isAdmin(env, email) && !isOwner) {
     return json({
       error: "Forbidden: only admin or current owner can delete service",
     }, 403);
@@ -894,8 +1026,8 @@ async function handleDeleteUpload(env, email, uploadId) {
     .first();
 
   if (!row) return json({ error: "Upload not found" }, 404);
-  if (row.owner_email !== email) {
-    return json({ error: "Forbidden: only owner can delete upload" }, 403);
+  if (row.owner_email !== email && !isAdmin(env, email)) {
+    return json({ error: "Forbidden: only owner or admin can delete upload" }, 403);
   }
 
   await db
@@ -938,8 +1070,8 @@ async function handleTransferServiceOwner(request, env, email, serviceId) {
     .first();
 
   if (!service) return json({ error: "Service not found" }, 404);
-  if (service.owner_email !== email) {
-    return json({ error: "Forbidden: only current owner can transfer" }, 403);
+  if (service.owner_email !== email && !isAdmin(env, email)) {
+    return json({ error: "Forbidden: only current owner or admin can transfer" }, 403);
   }
 
   const body = await request.json();
