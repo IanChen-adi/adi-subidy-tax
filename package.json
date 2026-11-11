@@ -1,0 +1,13 @@
+{
+  "name": "adi-subidy-tax",
+  "version": "1.0.0",
+  "private": true,
+  "description": "產創補助＆租稅優惠資料上傳與查詢平台（Cloudflare Pages + D1）",
+  "scripts": {
+    "dev": "wrangler pages dev . --compatibility-date=2026-11-01",
+    "deploy": "wrangler pages deploy . --project-name=adi-subidy-tax"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

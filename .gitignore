@@ -1,0 +1,19 @@
+# 依賴
+node_modules/
+.wrangler/
+
+# 環境變數與金鑰（絕不進版控）
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.key
+service_account.json
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# 日誌
+*.log

@@ -6,28 +6,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // 與 adi-portal 共用的 ADI 設計權杖（docs/design/tokens.css）
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            adi: {
+              navy: '#1F323D', green: '#B4C43F', deepblue: '#1F4F7A', cyan: '#47A2DB',
+              mint: '#53B38C', coral: '#C95A53', silver: '#C9CACA', gray: '#5F5F5F',
+              bg: '#F8FAFC'
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto',
+                   '"Noto Sans TC"', '"PingFang TC"', 'sans-serif'],
+          },
+          boxShadow: {
+            soft: '0 4px 24px -2px rgba(31,50,61,.06), 0 2px 8px -1px rgba(31,50,61,.04)',
+            card: '0 10px 30px -4px rgba(31,50,61,.08), 0 4px 12px -2px rgba(31,50,61,.03)'
+          }
+        }
+      }
+    }
+  </script>
   <!-- SheetJS (XLSX) for Excel 處理 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-900">
-  <div class="min-h-screen max-w-6xl mx-auto p-4 space-y-6">
-    <!-- Header -->
-    <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold">產創補助資料上傳與查詢平台</h1>
-        <p class="text-sm text-slate-600">
-          一站式產創條例稅務優惠＋補助資訊共享平台
-        </p>
+<body class="bg-adi-bg text-slate-800 font-sans antialiased">
+  <div class="min-h-screen max-w-6xl mx-auto px-6 py-8 space-y-7">
+    <!-- Header（ADI 官方識別，與 adi-portal 一致） -->
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white border border-slate-200 rounded-2xl px-6 py-4 shadow-soft">
+      <div class="flex items-center gap-4">
+        <img src="assets/adi_logo_horizontal.png" alt="數位發展部數位產業署"
+             class="h-11 w-auto object-contain" onerror="this.src='assets/adi_logo.svg'" />
+        <div class="hidden sm:block w-[1.5px] h-8 bg-slate-300"></div>
+        <div>
+          <div class="text-xs font-semibold text-slate-500 tracking-wide">數位發展部數位產業署</div>
+          <div class="text-xl font-bold text-adi-navy tracking-tight flex items-center gap-2.5">
+            <span>產創補助資料上傳與查詢平台</span>
+            <span class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-adi-green/20 text-adi-navy border border-adi-green/50">資料共編</span>
+          </div>
+        </div>
       </div>
-      <div class="space-y-1 text-sm text-right">
+      <div class="space-y-1 text-sm sm:text-right">
         <div id="user-info" class="font-mono text-slate-700">載入中...</div>
         <div class="text-xs text-slate-400">
-          開發 模式可填 email 模擬：<br />
+          開發模式可填 email 模擬<br />
           <input
             id="dev-email"
             type="email"
             placeholder="you@adi.gov.tw"
-            class="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+            class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-adi-green"
           />
         </div>
       </div>
@@ -38,9 +68,9 @@
 
     <main class="space-y-10">
       <!-- Search Section -->
-      <section id="search-section" class="rounded-xl bg-white p-4 shadow-sm">
+      <section id="search-section" class="rounded-2xl bg-white p-7 border border-slate-200 shadow-soft">
         <div class="mb-4 flex items-center justify-between gap-2">
-          <h2 class="text-lg font-semibold">🔍 公司資料查詢</h2>
+          <h2 class="text-lg font-bold text-adi-navy flex items-center gap-2.5"><span class="w-1 h-5 rounded bg-adi-green"></span>公司資料查詢</h2>
           <div class="text-xs text-slate-500">
             統一編號：精準查詢 · 公司名稱：模糊查詢
           </div>
@@ -51,19 +81,19 @@
             id="search-query"
             type="text"
             placeholder="請輸入統一編號或公司名稱"
-            class="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+            class="flex-1 rounded border border-slate-300 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-adi-green"
             required
           />
           <button
             type="submit"
-            class="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            class="rounded bg-adi-navy px-4 py-2 text-sm font-semibold text-white hover:bg-adi-deepblue"
           >
             查詢
           </button>
           <button
             id="search-export-btn"
             type="button"
-            class="rounded border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            class="rounded border border-adi-deepblue px-4 py-2 text-sm font-semibold text-adi-deepblue hover:bg-adi-green/10"
           >
             匯出查詢結果（CSV）
           </button>
@@ -75,9 +105,9 @@
       </section>
 
       <!-- Upload Section -->
-      <section id="upload-section" class="rounded-xl bg-white p-4 shadow-sm">
+      <section id="upload-section" class="rounded-2xl bg-white p-7 border border-slate-200 shadow-soft">
         <div class="mb-4 flex items-center justify-between gap-2">
-          <h2 class="text-lg font-semibold">📤 上傳資料（CSV或Excel）</h2>
+          <h2 class="text-lg font-bold text-adi-navy flex items-center gap-2.5"><span class="w-1 h-5 rounded bg-adi-green"></span>上傳資料（CSV 或 Excel）</h2>
           <div class="text-xs text-slate-500">
             欄位名稱可用中文，至少需包含「統一編號」、「公司名稱」
           </div>
@@ -107,7 +137,7 @@
                 type="number"
                 min="1"
                 value="2"
-                class="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                class="w-full rounded border border-slate-300 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-adi-green"
               />
               <p class="mt-1 text-xs text-slate-400">預設第 2 列為欄位名稱</p>
             </div>
@@ -122,7 +152,7 @@
                 id="company-id-header"
                 type="text"
                 value="統一編號"
-                class="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                class="w-full rounded border border-slate-300 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-adi-green"
               />
             </div>
             <div>
@@ -133,7 +163,7 @@
                 id="company-name-header"
                 type="text"
                 value="公司名稱"
-                class="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                class="w-full rounded border border-slate-300 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-adi-green"
               />
             </div>
           </div>
@@ -156,7 +186,7 @@
           <div class="flex justify-end gap-3">
             <button
               type="submit"
-              class="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              class="rounded bg-adi-navy px-4 py-2 text-sm font-semibold text-white hover:bg-adi-deepblue"
             >
               上傳並匯入資料庫
             </button>
@@ -165,9 +195,9 @@
       </section>
 
       <!-- Manage Section -->
-      <section id="manage-section" class="rounded-xl bg-white p-4 shadow-sm">
+      <section id="manage-section" class="rounded-2xl bg-white p-7 border border-slate-200 shadow-soft">
         <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 class="text-lg font-semibold">⚙️ 服務項目管理（擁有者使用）</h2>
+          <h2 class="text-lg font-bold text-adi-navy flex items-center gap-2.5"><span class="w-1 h-5 rounded bg-adi-green"></span>服務項目管理（擁有者使用）</h2>
           <div class="text-xs text-slate-500">
             只允許 擁有者 刪除 / 轉移 服務項目
           </div>
@@ -219,7 +249,7 @@
               </label>
               <button
                 type="submit"
-                class="mt-1 w-full rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                class="mt-1 w-full rounded bg-adi-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-adi-deepblue"
               >
                 建立服務項目
               </button>
@@ -286,15 +316,15 @@
       globalMessageEl.textContent = text;
       globalMessageEl.classList.remove("hidden");
       globalMessageEl.classList.remove(
-        "border-blue-200",
-        "bg-blue-50",
-        "text-blue-800",
+        "border-adi-deepblue/25",
+        "bg-adi-deepblue/5",
+        "text-adi-deepblue",
         "border-red-200",
         "bg-red-50",
         "text-red-800",
         "border-emerald-200",
         "bg-emerald-50",
-        "text-emerald-800"
+        "text-emerald-700"
       );
       if (type === "error") {
         globalMessageEl.classList.add(
@@ -306,13 +336,13 @@
         globalMessageEl.classList.add(
           "border-emerald-200",
           "bg-emerald-50",
-          "text-emerald-800"
+          "text-emerald-700"
         );
       } else {
         globalMessageEl.classList.add(
-          "border-blue-200",
-          "bg-blue-50",
-          "text-blue-800"
+          "border-adi-deepblue/25",
+          "bg-adi-deepblue/5",
+          "text-adi-deepblue"
         );
       }
     }
@@ -704,7 +734,7 @@
             </div>
             <div class="text-[11px] px-2 py-0.5 rounded-full ${
               u.status === "active"
-                ? "bg-emerald-100 text-emerald-800"
+                ? "bg-adi-mint/15 text-emerald-700"
                 : "bg-slate-200 text-slate-700"
             }">
               ${u.status}

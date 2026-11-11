@@ -1,0 +1,24 @@
+#:schema node_modules/wrangler/config-schema.json
+# =============================================================================
+# 這是「範本」，不是生效中的設定。啟用步驟：
+#
+#   1. 先確認 Cloudflare Pages 專案目前的 D1 binding 名稱（後台 → Settings →
+#      Functions → D1 database bindings），程式碼使用的是 env.DB。
+#   2. 取得該 D1 的 database_id：
+#        npx wrangler d1 list
+#   3. 把下面的 <REPLACE_WITH_D1_DATABASE_ID> 換成實際值，
+#      並將本檔改名為 wrangler.toml。
+#   4. 先在本機 `npx wrangler pages dev .` 確認可運作，再提交。
+#
+# 目的：目前 D1 binding 只存在 Cloudflare 後台，部署不可重現。
+#       有 wrangler.toml 之後，設定才能進版控、可交接。
+# =============================================================================
+
+name = "adi-subidy-tax"
+compatibility_date = "2026-11-01"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "<REPLACE_WITH_D1_NAME>"
+database_id = "<REPLACE_WITH_D1_DATABASE_ID>"
