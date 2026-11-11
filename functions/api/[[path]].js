@@ -7,7 +7,7 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:8789",
   "https://adi-subsidy.pages.dev",
   "https://inv-subsidy-adi.pages.dev",
-  "https://inv-adi.org",
+  // inv-adi.org 已停用（網域過期放棄），不可再列入，避免被他人註冊後取得信任
 ];
 
 // ===== 管理者 =====
