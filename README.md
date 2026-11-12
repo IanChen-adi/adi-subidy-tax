@@ -3,14 +3,15 @@
 Cloudflare Pages（靜態 `index.html`）＋ Pages Functions（`functions/api/[[path]].js`）＋ D1 資料庫，前面由 Cloudflare Access 保護。
 
 - 正式網址：`https://inv-subsidy-adi.pages.dev`（另有 `adi-subsidy.pages.dev`）
-- D1 綁定名稱：`DB`（在 Pages → Settings → Bindings 設定）
+- 部署設定：`wrangler.toml`（D1 `invest-db2` 綁定為 `DB`、Access 參數）。兩個 Pages 專案 `adi-subidy-tax`、`adi-subsidy-tax` 都從 `main` 自動部署並共用此檔
+- 預覽部署刻意不綁資料庫，無法登入
 
 ## 登入機制
 
 後端只信任**經過簽章驗證**的 Cloudflare Access JWT（`Cf-Access-Jwt-Assertion` header 或 `CF_Authorization` cookie）。
 沒有設定下列環境變數時，所有人都視為未登入（fail closed）。
 
-| 環境變數（Pages → Settings → Variables and Secrets） | 說明 |
+| 環境變數（寫在 `wrangler.toml` 的 `[vars]`） | 說明 |
 |---|---|
 | `CF_ACCESS_TEAM_DOMAIN` | Zero Trust 團隊網域，例如 `xxx.cloudflareaccess.com`（Zero Trust → Settings → Custom Pages / Team domain） |
 | `CF_ACCESS_AUD` | Access 應用程式的 **Application Audience (AUD) Tag**（Zero Trust → Access → Applications → 該 app → Overview）。多個 app 用逗號分隔 |

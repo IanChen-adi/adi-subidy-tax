@@ -1,0 +1,23 @@
+# Cloudflare Pages 設定檔
+# adi-subidy-tax 與 adi-subsidy-tax 兩個 Pages 專案都由本 repo 的 main 自動部署，共用這份設定。
+# 有了這個檔，Pages 後台的「綁定」與「一般環境變數」改以本檔為準（機密值仍在後台設定）。
+name = "adi-subidy-tax"
+compatibility_date = "2025-12-04"
+pages_build_output_dir = "."
+
+# ---------- 正式環境（頂層設定） ----------
+[vars]
+# Cloudflare Zero Trust 團隊網域與 Access 應用程式「產創一站式資訊共享平台」的 AUD Tag
+CF_ACCESS_TEAM_DOMAIN = "adi-policy.cloudflareaccess.com"
+CF_ACCESS_AUD = "04c9030b92f22e1082b8cb61deb20e548b282863b13e51db6c1b27a9ae8f6b82"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "invest-db2"
+database_id = "8fb98518-44dc-4fc7-ac94-868f5d2d4ecf"
+
+# ---------- 預覽環境（各分支、每次推送產生的預覽網址） ----------
+# 刻意不綁資料庫、不設 Access 參數：預覽部署一律無法登入、碰不到正式資料。
+# （綁定與 vars 不會從頂層繼承，這裡沒寫就是沒有。）
+[env.preview.vars]
+ENVIRONMENT = "preview"
