@@ -42,45 +42,34 @@ function withCors(request, response) {
   });
 }
 
-// ===============================
-// JWT 解碼（不驗證簽章，只解 payload）
-// ===============================
-function decodeJwt(jwt) {
-  const parts = jwt.split(".");
-  if (parts.length < 2) throw new Error("Invalid JWT");
+// 註：原本此處有 decodeJwt()，僅做 base64 解碼、未驗證簽章即取用 email，
+// 等同可被偽造。因身分一律取自 Cloudflare Access 注入的標頭，該函式已無用途，故移除。
+// 若未來需依 Access JWT 取身分，請以 Web Crypto 驗證 RS256 簽章與 aud/iss/exp 後再使用
+// （參考 adi-portal/functions/_lib/auth.js 的 fail-closed 實作）。
 
-  const payloadBase64 = parts[1]
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .padEnd((parts[1].length + 3) & ~3, "=");
-
-  const json = atob(payloadBase64);
-  return JSON.parse(json);
+// 開發環境才允許的「模擬身分」通道。
+// 只有 ENVIRONMENT === "development" 時啟用；正式環境（未設定或任何其他值）一律停用，
+// 避免未經 Cloudflare Access 的請求自送 X-User-Email 冒充任意身分。
+function isDevMode(env) {
+  return !!env && env.ENVIRONMENT === "development";
 }
 
-function getEmail(request) {
-  // 1. Cloudflare Access（使用者登入模式）
+function getEmail(request, env) {
+  // 1. Cloudflare Access 注入的身分（唯一可信來源）
+  //    此標頭由 Cloudflare 在邊緣寫入，客戶端無法偽造。
   const email = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (email) return email;
 
-  // 2. 本地 dev 模式
-  const dev = request.headers.get("X-User-Email");
-  if (dev) return dev;
-
-  // 3. Cloudflare Access JWT（只有少數 Access 設定會用到）
-  const jwt = request.headers.get("cf-access-jwt-assertion");
-  if (jwt) {
-    try {
-      const payload = decodeJwt(jwt);
-      if (payload.email) return payload.email;
-      if (payload.sub && payload.sub.includes("@")) return payload.sub;
-    } catch (e) {
-      console.warn("Skip malformed JWT, fallback to other methods");
-      // ❗ 絕對不要 return ""
-    }
+  // 2. 本地開發模擬身分（僅 development）
+  if (isDevMode(env)) {
+    const dev = request.headers.get("X-User-Email");
+    if (dev) return dev;
   }
 
-  // 4. 都沒有 → 未登入
+  // 3. 都沒有 → 未登入
+  //    註：原本第 3 順位會解析 cf-access-jwt-assertion，但只做 base64 解碼、
+  //    未驗證 RS256 簽章與 aud/iss/exp，等同可被偽造，故移除。
+  //    若未來需要依 JWT 取身分，須先補上完整簽章驗證再啟用。
   return "";
 }
 
@@ -188,7 +177,7 @@ export const onRequest = async (context) => {
     });
   }
 
-  const email = getEmail(request);
+  const email = getEmail(request, env);
 
   try {
     // 健康檢查
